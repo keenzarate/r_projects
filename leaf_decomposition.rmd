@@ -1,0 +1,286 @@
+---
+title: "Leaf Decomposition Case Study"
+author: "Keen Zarate"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+---
+
+Raw data grabbed from a book
+```{r}
+
+###Yellowbirch
+LowNY=c(76,56,53,47,39,39,31,32,27,22,29,19);
+HighNY=c(75,65,59,54,48,47,50,36,48,34,37,35)
+Months=c(9,12,21,24,33,36,45,48,57,60,69,72)
+
+###Red Maple
+LowNRM=c(65,51,45,45,45,52,44,43,41,41,51,40)
+HighNRM=c(67,58,53,54,49,55,53,54,53,56,56,48)
+MonthsRM=c(9,12,21,24,33,36,45,48,57,60,69,72)
+
+##Red Pine
+LowNRP=c(84,73,57,51,54,41,32,30,33,28,27,26)
+HighNRP=c(84,74,62,59,56,50,38,36,44,33,34,33)
+MonthsRP=c(9,12,21,24,33,36,45,48,57,60,69,72)
+```
+
+
+```{r}
+plot(MonthsRM, LowNRM, ylim=c(35,70), xlab="Time", ylab="% Mass Remaining", main="Red Maple Oak")
+points(MonthsRM, HighNRM, col="2")
+legend("topright",c("Low Nitrogen","High Nitrogen"),pch=1, col=c("Black","Red"))
+
+plot(MonthsRP,LowNRP, xlab="Time", ylab="% Mass Remaining", main="Red Pine")
+points(MonthsRP, HighNRP, col="2")
+legend("topright",c("Low Nitrogen","High Nitrogen"),pch=1, col=c("Black","Red"))
+
+plot(Months,LowNY, xlab="Time", ylab="% Mass Remaining", main="Yellow Birch")
+points(Months, HighNY, col="2")
+legend("topright",c("Low Nitrogen","High Nitrogen"),pch=1, col=c("Black","Red"))
+```
+
+Units of the parameters
+1. The unit of r1 and r2 is (1/time). M is the % after time 0.
+2. The physical interpretation of r1 and r2 is that they are the decomposition rate of DOC. 
+M represents the changing percentage of DOC for it's initial when multiplied to the rate. 
+
+Exercise 2.3 
+a. m[21]=100*exp(-r1*21)
+53=100*exp(-r1*21)
+r1=0.0302
+
+100E^-r1*t. I am using time= 21 and lowN= 53 
+I get r1= 0.0302
+
+PART B; MANIPULATE
+
+### 2.3 PART B
+
+library(manipulate)
+manipulate({plot(yellowbirch$Months,yellowbirch$lowN, xlab="Time (Month)", ylab="Low Nutrient", main="Yellow Birch")
+lines(times,100*exp(-r*times))
+},
+r=slider(0,.4,step=0.01))
+
+Exercise 2.3b
+
+I found r1=0.025 to be a reasonable fit.
+
+
+```{r}
+### 2.3 PART C
+
+LowNY=c(76,56,53,47,39,39,31,32,27,22,29,19);
+HighNY=c(75,65,59,54,48,47,50,36,48,34,37,35)
+Months=c(9,12,21,24,33,36,45,48,57,60,69,72)
+
+##Yellow Birch Low N Model 1
+fit1A=nls(LowNY~ 100*exp(-r*Months), start=list(r=0.030))
+r1A=coef(fit1A)["r"]
+r1A
+```
+Exercise 2.3c
+Best-fit value for r1 = 0.0264.Which is close to the values I found from part a and b.
+
+```{r}
+### 2.3 PART D
+
+plot(Months, LowNY)
+lines(Months,100*exp(-0.02645156*Months))
+```
+
+```{r}
+#### Exercise 2.4 LINEAR REGRESSION
+
+logLowN= log(LowNY)
+
+fit2=lm(logLowN~Months)   
+r2=-fit2$coefficients[2]
+r2
+plot(Months,LowNY, xlab="Time (Months)",ylab="Low Nutrient")
+lines(Months,log(100)-(r2*Months))
+```
+
+r1= 0.018. Disadvantages of this method is that it will try to create a straight line on a values that are curved and it will give us a really huge number for r1. An advantage of this method though is that it will make be easier to find value for r1. The number is also close to the values I found for r1 using non-linear regression, but I think it does not take other variables in consideration.
+
+
+
+### Exercise 2.5
+
+library(manipulate)
+manipulate({plot(Months,LowNY, xlab="Time (Months)", ylab="Low Nutrient", main="Yellow Birch")
+  lines(Months,(100-M)*exp(-r2*Months)+M)
+},
+r=slider(0,.4,step=0.01), M=slider(0,10,step=1))
+
+
+2.5 PART A. 
+
+r2= 0.03 and M=6
+
+
+```{r}
+
+##2.5 PART B YELLOW BIRCH LOW N MODEL 2
+
+fit3A=nls(LowNY~((100-M)*exp(-r*Months))+M, start=list(r=0.03, M=6))
+r2=coef(fit3A)["r"]
+M1=coef(fit3A)["M"]
+r2
+M1
+```
+PART B. 
+
+r2=0.04742281 and M=21.54939
+
+
+```{r}
+
+###2.5 PART C
+
+{plot(Months,LowNY, xlab="Time", ylab="% Mass Remaining", main="Yellow Birch")
+lines(Months,((100-21.54939)*exp(-0.04742281*Months))+21.54939)
+}
+```
+
+2.5 PART D:
+
+Yes I think that it is a good fit. The line touches on multiple data points and shows exactly how this points behave. 
+
+
+```{r}
+### Exercise 2.6 
+
+AIC(fit1A)
+AIC(fit3A)
+```
+
+
+Exercise 2.7
+```{r}
+############################################################
+############################################################
+
+##High N for Yellow Birch Model 1
+fit1B=nls(HighNY~100*exp(-r*Months), start=list(r=0.031))
+r1B=coef(fit1B)["r"]
+r1B ##YellowBirch R1 High N
+
+##High N for Yellow Birch Model 2
+fit3B=nls(HighNY~((100-M)*exp(-r*Months))+M, start=list(r=0.23, M=25))
+r2A=coef(fit3B)["r"]
+M1A=coef(fit3B)["M"]
+r2A ##YellowBirch R2 High N
+M1A ##YellowBirch M High N
+
+##################################################################
+############################Red Maple Oak#########################
+LowNRM=c(65,51,45,45,45,52,44,43,41,41,51,40)
+HighNRM=c(67,58,53,54,49,55,53,54,53,56,56,48)
+MonthsRM=c(9,12,21,24,33,36,45,48,57,60,69,72)
+
+#####Model 1 LOWN AND HIGH N
+fit4A=nls(LowNRM~ 100*exp(-r*MonthsRM), start=list(r=0.047))
+fit4B=nls(HighNRM~ 100*exp(-r*MonthsRM), start=list(r=0.044))
+r1A=coef(fit4A)["r"]
+r1B=coef(fit4B)["r"]
+r1A ##Red Maple R1 Low N
+r1B ##Red Maple R1 high N
+
+##Model 2 LOWN AND HIGHN
+fit5A=nls(LowNRM~((100-M)*exp(-r*MonthsRM))+M, start=list(r=0.17, M=15))
+fit5B=nls(HighNRM~((100-M)*exp(-r*MonthsRM))+M, start=list(r=0.17, M=48))
+r2A=coef(fit5A)["r"]
+r2B=coef(fit5B)["r"]
+M1A=coef(fit5A)["M"]
+M1B=coef(fit5B)["M"]
+r2A ##Red maple R2 LowN
+r2B ##Red maple R2 HighN
+M1A ##Red maple M Low N
+M1B ##Red Maple M high N
+
+plot(Months, LowNRM)
+lines(Months,100*exp(-0.019*Months))
+
+{plot(MonthsRM,HighNRM, xlab="Time", ylab="High N", main="Red Maple Model 2 High N")
+lines(Months,((100-52.76)*exp(-0.155*Months))+52.76)
+}
+```
+######################################################################################################################################
+```{r}
+##########################RED PINE FIT#############################
+
+LowNRP=c(84,73,57,51,54,41,32,30,33,28,27,26)
+HighNRP=c(84,74,62,59,56,50,38,36,44,33,34,33)
+MonthsRP=c(9,12,21,24,33,36,45,48,57,60,69,72)
+
+##Model 1
+fit6A=nls(LowNRP~ 100*exp(-r*MonthsRP), start=list(r=0.0262))
+fit6B=nls(HighNRP~ 100*exp(-r*MonthsRP), start=list(r=0.022))
+r1A=coef(fit6A)["r"]
+r1B=coef(fit6B)["r"]
+r1A ##Red Pine R1 LowN
+r1B ##Red Pine R1 highN
+
+##Model 2
+fit7A=nls(LowNRP~((100-M)*exp(-r*MonthsRP))+M, start=list(r=0.11, M=12.5))
+fit7B=nls(HighNRP~((100-M)*exp(-r*MonthsRP))+M, start=list(r=0.03, M=13))
+r2A=coef(fit7A)["r"]
+r2B=coef(fit7B)["r"]
+M1A=coef(fit7A)["M"]
+M1B=coef(fit7B)["M"]
+r2A ##Red Pine R2 LOW N
+r2B ##Red Pine R2 High N
+M1A ##Red Pine M Low N
+M1B ##Red Pine M High N
+
+```
+
+Exercise 2.7 
+```{r}
+AIC(fit1A) ##Yellowbirch LowN Model 1
+AIC(fit1B) ##Yellowbirch High N Model 1
+AIC(fit3A) ##Yellowbirch Low N Model 2
+AIC(fit3B) ##Yellowbirch High N Model 2
+AIC(fit4A) ##Red Maple Oak LowN Model 1
+AIC(fit4B) ##Red Maple Oak HighN Model 1
+AIC(fit5A) ##Red Maple Oak LowN Model 2
+AIC(fit5B) ##Red Maple Oak HighN Model 2
+AIC(fit6A) ##Red Pine LowN Model 1
+AIC(fit6B) ##Red Pine HighN Model 1
+AIC(fit7A) ##Red Pine LowN Model 2
+AIC(fit7B) ##Red Pine High Model 2
+```
+
+Exercise 2.8
+The AIC for each data set differ on the type of model used. Model 2 on all the three types are lower than the AIC for Model 1 for the three tree type.
+
+Model 2 is better because it has a lower AIC overall for all three of the tree type. I think this is due to the fact that an extra M variable is being considered. In the nls it takes this value in consideration in creating the best-fit line. M could be the mass that is not decomposing. 
+
+Exercise 2.9
+In Model 2, the best- fit parameter for 
+Red Maple Oak Model 2:
+Low N r2= 0.13492 M=44.006
+High N r2=0.15506 M= 52.76845
+
+For the Red Maple Oak, the decomposition rate is not that far off from each other. LowN was 0.13 while highN was 0.15. Although M is slighty far off from each other. There is a higher difference between the percentage of leaf litter that was not decomposed from the lower N compared to high N. It is still clear to see that for the lower N, there is faster and more leaf litter that are being decomposed compared to the high nitrogen one.
+
+
+Best-fit paramater for
+Yellow Birch Model 2:
+Low N r2= 0.047 M=21.54
+High N r2= 0.054 M=36.9913
+
+In comparison to the decomposition rate of low nitrogen vs. high nitrogen, high nitrogen has a slower rate of decomposition of r2=0.0.054 vs r2=0.047 for low nitrogen. Which means that in the high nitrogen, there is a higher percentage of leaf litter that has not decompose and for the low nitrogen, there is higher leaf litter that decomposes because of the faster rate of decomposition.The M varies for both low an high nitrogen.
+
+
+Red Pine Model 2:
+Low N r2= 0.032  M = 17.21
+High N r2=0.0324 M= 25.37
+
+Red Pine tree does not show much difference on their decomposition rate, however, we can see a slightly larger difference on the variable M. We can assume that the level of nitrogen affects the time of leaf litter decomposition or how many leaf are decomposed given the level of nitrogen at a given amount of time. 
+
+The level of nitrogen does not necessarliy affect the decomposition rate, but affects how fast or how slow the leaf litter are being decomposed.
+```{r}

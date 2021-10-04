@@ -1,0 +1,181 @@
+---
+title: "Magic Square"
+author: "Keen Zarate"
+---
+
+The goal for this project is to create magic squares using simulated annealing through multiple steps, 
+we will minimize a function, create a proposal transition matrix and then do the simulated annealing.
+
+##Starting state: 
+###This is not a magic square.
+```{r}
+mm <- matrix(sample(1:9,9,rep=F),nrow=3)
+mm
+```
+
+##Function to minimize: 
+###I'm doing the sum of the diagonal.Since there are two diagonal, we will do both here. 
+```{r}
+n <- 3
+DiagSumA<-function(mq,d){
+  tot<-0
+  for(i in 1:n){
+    col<-i+d
+    if(col>3)
+      col<-col-n
+    tot<-tot+mq[i,col]
+  }
+  tot
+}
+DiagSumA(mm,0)
+```
+
+###Do this for the other diagonal also.
+```{r}
+DiagSumB<-function(mq,d){
+  tot<-0
+  for(i in 1:n){
+    col<-(n+1)-(i+d)
+    if(col<1)
+      col<-col+n
+    tot<-tot+mq[i,col]
+  }
+  tot
+}
+DiagSumB(mm,0)
+```
+
+##Function to Minimize 
+
+###Let's try to do this in vector:
+```{r}
+vals<-function(mm){
+  vec<-c(sum(mm[1,]),sum(mm[2,]),sum(mm[3,]),
+         sum(mm[,1]),sum(mm[,2]),sum(mm[,3]),
+         DiagSumA(mm,0),
+         DiagSumB(mm,0)
+  )
+  vec
+}
+vals(mm)
+```
+
+####After we got the sum of the diagonals, we will then make a function that calculates it's absolute value distance from 15. This is f() below:
+```{r}
+f<-function(mm){
+  vec<-c(sum(mm[1,]),sum(mm[2,]),sum(mm[3,]),
+         sum(mm[,1]),sum(mm[,2]),sum(mm[,3]),
+         DiagSumA(mm,0),
+         DiagSumB(mm,0)
+  )
+  mean(abs(vec-15))
+}
+f(mm)
+```
+
+##Proposal Function
+###Swap Sites
+```{r}
+swapsite<-function(currState){
+  propState<-currState
+  siteA<-sample(1:n,2,rep=F)
+  siteB<-sample(1:n,rep=F)
+  turnA<-propState[siteA[1],siteA[2]]
+  turnB <- propState[siteB[1],siteB[2]]
+  propState[siteA[1],siteA[2]]<-turnB
+  propState[siteB[1],siteB[2]]<-turnA
+  propState
+}
+
+mm
+swapsite(mm)
+```
+
+
+###Swap Two Rows/Columns 
+I chose to swap row
+```{r}
+swaprow<-function(currState){
+  do<-sample(c("R","C"),1)
+  propState<-currState
+  rc<-sample(1:n,2,rep=F)
+  if(do=="R"){
+    propState=t(propState)
+  }
+  turn<-propState[rc[1],]
+  propState[rc[1],]<-propState[rc[1],]
+  propState[rc[1],]<-propState[rc[2],]
+  propState[rc[2],]<-turn
+  if(do=="R"){
+    propState=t(propState)
+  }
+  propState
+}
+mm
+swaprow(mm)
+```
+
+###Putting all in a doMove function.
+```{r}
+doMove<-function(currState,sig){
+  if(runif(1,0,1)<0.5){
+    propState<-swapsite(currState)
+  }else{
+    propState<-swaprow(currState)
+  }
+  currF<-f(currState)
+  propF<-f(propState)
+  dFunc<-propF-currF
+  rho<-exp(-dFunc/sig)
+  if(runif(1,0,1)<rho){
+    return(propState)
+  }else{
+    return(currState)
+  } 
+}
+```
+
+Now, we are going to create a magic square using Simulated Annealing:
+```{r}
+n <- 3
+state<-matrix(sample(1:n^2,n^2,rep=F),nrow=3)
+f(state)
+vals(state)
+```
+
+```{r}
+sig <- .1
+M <- 30000
+decFac <- .9999
+tot <- 0
+for(m in 1:M){
+  state <- doMove(state, sig)
+  # slowly decrease sig
+  sig <- sig*decFac
+}
+sig
+
+state
+```
+
+Let's check if it does actually gives us a magic square: Two ways to do it, is calculating the sum of each row and column and diagonal or we can just use the f() function we had earlier and see if we get 0?.
+```{r}
+sum(state[,3])
+sum(state[3,])
+sum(state[,2])
+sum(state[2,])
+sum(state[1,])
+sum(state[,1])
+f(state)
+```
+
+##Conclusion: 
+We were able find the magic square matrix using simulated annealing. 
+Yay! The problem with this simulated annealing process though is that 
+I am not really getting a magic square 100% of the time. 
+I think because we need to keep changing the value of sig or decFac just to make it work, 
+it's a little inconvinient. I think one way to improve this is that create a nested for 
+loop in the simulated annealing and keep rolling or creating a matrix and not get a 
+result unless it is a magiv square. Maybe adding more proposal transition matrix 
+automatically and it will just run until it will give us 100% result that it is a magic square. 
+

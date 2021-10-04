@@ -1,0 +1,92 @@
+---
+title: "Trouble"
+author: "Keen Zarate"
+---
+
+##Print some code that simulates a move in the game Trouble.
+```{r}
+move<- function(){
+roll <- sample(1:6,1)
+total <- roll
+while(roll==6){
+  roll <- sample(1:6,1)
+  total <- total+roll
+}
+total
+}
+move()  
+```
+
+##What is the average length of a move?
+```{r}
+sim <- function(){
+  sum <- 0
+  M <- 1000000
+  for(i in 1:M){
+    sum <- sum + move()
+  }
+  sum/M  #this is the average length
+}
+sim()
+system.time(sim())
+
+M <- 1000000
+mean(replicate(M, move()))
+system.time(mean(replicate(M, move())))
+
+
+```
+
+##What happens if you change the roll-again value?
+###For this one, I changed the roll-again value to 3 instead of six. 
+Let's see how this will affect the chances of winning
+```{r}
+x<- function(){
+  roll <- sample(1:6,1)
+  total <- roll
+  while(roll==6){
+    roll <- sample(1:6,1)
+    total <- total+roll
+  }
+  total
+}
+
+x() 
+
+simx <- function(){
+  sum <- 0
+  M <- 1000000
+  for(i in 1:M){
+    sum <- sum + x()
+  }
+  sum/M  
+}
+simx()
+system.time(simx())
+```
+
+```{r}
+y=move<- function(){
+  roll <- sample(1:6,1)
+  total <- roll
+  while(roll==1){
+    roll <- sample(1:6,1)
+    total <- total+roll
+  }
+  total
+}
+
+y() 
+
+simy <- function(){
+  sum <- 0
+  M <- 1000000
+  for(i in 1:M){
+    sum <- sum + y()
+  }
+  sum/M  
+}
+simy()
+system.time(simy())
+```
+

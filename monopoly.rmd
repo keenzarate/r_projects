@@ -1,0 +1,407 @@
+---
+title: "Monopoly"
+author: "Keen Zarate"
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r}
+Monopoly<- read.csv("~/Downloads/MonopolyData.csv")
+library(knitr)
+library(kableExtra)
+options(knitr.table.format = "html") 
+```
+
+My goal for this project is to simulate the game of *Monopoly* by 
+implementing the steps for the paper *Take a Walk on the Boardwalk* 
+by Abbott and Richey. I will be exploring this by verifying the four tables 
+they used on their paper using markov chains. Note that the spaces used on 
+the paper is less than what we will be using on this project, so data may 
+not be 100% similar. Regardless, it would still work. 
+
+Step 1: For this step, I will be making four transition matrices, roll, 
+the go to jail, community chest, and the chance.
+```{r}
+cycleVec <- function(vec, k){
+front <- tail(vec, k)
+back <- head(vec, length(vec) - k)
+c(front, back)
+}
+
+##Roll Trans
+rolltrans <- matrix(0, nrow=40, ncol=40)
+probs <- c(0,1/36,2/36,3/36,4/36,5/36,6/36,5/36,4/36,3/36,2/36,1/36,rep(0,28))
+for(i in 1:40){
+  rolltrans[,i] <- cycleVec(probs, i)
+  }
+colSums(rolltrans)
+
+##Jail Trans
+Jail <- matrix(0,nrow=40,ncol=40)
+probsJ <- c()
+for(i in 1:40){
+  Jail[i,i] <- 1
+}
+Jail[31,31] <- 0
+Jail[11,31] <- 1
+colSums(Jail)
+
+JR=Jail%*%rolltrans
+```
+
+
+## create the matrix for out Chance probabilities below.
+```{r}
+##Chance 
+Chance <- matrix(0,nrow=40,ncol=40)
+for(i in 1:40){
+  Chance[i,i] <- 1
+}
+Chance[8,8] <- 6/16
+Chance[1,8] <- 1/16
+Chance[11,8] <- 1/16
+Chance[25,8] <- 1/16
+Chance[12,8] <- 1/16
+Chance[40,8] <- 1/16
+Chance[5,8] <- 1/16
+Chance[13,8] <- 1/16
+Chance[16,8] <- 2/16
+Chance[6,8] <- 1/16
+
+Chance[23,23] <- 6/16
+Chance[1,23] <- 1/16
+Chance[11,23] <- 1/16
+Chance[25,23] <- 1/16
+Chance[12,23] <- 1/16
+Chance[40,23] <- 1/16
+Chance[5,23] <- 1/16
+Chance[13,23] <- 1/16
+Chance[16,23] <- 2/16
+Chance[6,23] <- 1/16
+
+Chance[37,37] <- 6/16
+Chance[1,37] <- 1/16
+Chance[11,37] <- 1/16
+Chance[25,37] <- 1/16
+Chance[12,37] <- 1/16
+Chance[40,37] <- 1/16
+Chance[5,37] <- 1/16
+Chance[13,37] <- 1/16
+Chance[16,37] <- 2/16
+Chance[6,37] <- 1/16
+
+colSums(Chance)
+```
+
+
+Create the Community Chest probability matrix.
+```{r}
+CommunityChest <- matrix(0,nrow=40,ncol=40)
+probsCC<- c()
+for(i in 1:40){
+  CommunityChest[i,i] <- 1
+}
+CommunityChest[3,3] <- 14/16
+CommunityChest[1,3] <- 1/16
+CommunityChest[11,3] <- 1/16
+
+CommunityChest[28,28] <- 14/16
+CommunityChest[1,28] <- 1/16
+CommunityChest[11,28] <- 1/16
+
+CommunityChest[34,34] <- 14/16
+CommunityChest[1,34] <- 1/16
+CommunityChest[11,34] <- 1/16
+
+colSums(CommunityChest)
+
+```
+
+Table 1: 
+```{r}
+Table1 <- CommunityChest%*%Chance%*%Jail%*%rolltrans
+eigenStuff1 <- eigen(Table1)
+vecs1 <- eigenStuff1$vectors
+ssVec1 <- vecs1[,1]
+ssVec1 <- ssVec1/sum(ssVec1)
+First <- sort(ssVec1, decreasing=TRUE, index.return=TRUE)
+First1 <- matrix(0,nrow=40,ncol=3)
+colnames(First1) <- c("Space","State","Frequency (%)" )
+First1[,1] <- First$ix
+States<-c(rep(0,40))
+for(i in 1:40){
+  States[i]<-as.character(Monopoly$Name[First$ix[i]])
+}
+First1[,2]<-States
+First1[1,2]<-"Jail"
+First1[,3]<-round(Re(First$x)*100,3)
+Table1A<-kable(First1, "html") %>%
+  kable_styling(bootstrap_options = "striped",full_width = F) %>%
+  scroll_box(width = "100%", height = "400px")
+Table1A
+```
+Conclusion: We can see that frequency values were pretty close to the ones in the paper. 
+The paper used different space number for each state, so the frequency approximation may 
+not exactly match the one Abbot and Richey found.  
+    
+## Step 2: Stay in jail
+
+Next, after the game has played for a while, the player would want to stay in jail for as l
+ong as they want. Only after three turns they have to move. 
+I will be doing the same thing I did the previous step here, 
+applying all the transition matrices that we already did in the previous steps.
+
+```{r}
+Chance <- matrix(0,nrow=42,ncol=42)
+for(i in 1:42){
+  Chance[i,i] <- 1
+}
+Chance[8,8] <- 6/16
+Chance[1,8] <- 1/16
+Chance[11,8] <- 1/16
+Chance[25,8] <- 1/16
+Chance[12,8] <- 1/16
+Chance[40,8] <- 1/16
+Chance[5,8] <- 1/16
+Chance[13,8] <- 1/16
+Chance[16,8] <- 2/16
+Chance[6,8] <- 1/16
+
+Chance[23,23] <- 6/16
+Chance[1,23] <- 1/16
+Chance[11,23] <- 1/16
+Chance[25,23] <- 1/16
+Chance[12,23] <- 1/16
+Chance[40,23] <- 1/16
+Chance[5,23] <- 1/16
+Chance[13,23] <- 1/16
+Chance[16,23] <- 2/16
+Chance[6,23] <- 1/16
+
+Chance[37,37] <- 6/16
+Chance[1,37] <- 1/16
+Chance[11,37] <- 1/16
+Chance[25,37] <- 1/16
+Chance[12,37] <- 1/16
+Chance[40,37] <- 1/16
+Chance[5,37] <- 1/16
+Chance[13,37] <- 1/16
+Chance[16,37] <- 2/16
+Chance[6,37] <- 1/16
+
+colSums(Chance)
+
+CommunityChest <- matrix(0,nrow=42,ncol=42)
+probsCC<- c()
+for(i in 1:42){
+  CommunityChest[i,i] <- 1
+}
+CommunityChest[3,3] <- 14/16
+CommunityChest[1,3] <- 1/16
+CommunityChest[11,3] <- 1/16
+
+CommunityChest[28,28] <- 14/16
+CommunityChest[1,28] <- 1/16
+CommunityChest[11,28] <- 1/16
+
+CommunityChest[34,34] <- 14/16
+CommunityChest[1,34] <- 1/16
+CommunityChest[11,34] <- 1/16
+
+colSums(CommunityChest)
+
+options(max.print=1000000)
+rolltrans <- matrix(0, nrow=40, ncol=40)
+probs <- c(0,1/36,2/36,3/36,4/36,5/36,6/36,5/36,4/36,3/36,2/36,1/36,rep(0,28))
+for(i in 1:40){
+  rolltrans[,i] <- cycleVec(probs, i)
+  }
+
+P2 <- matrix(0,nrow=42,ncol=42)
+P2[1:40,1:40] <- rolltrans
+rolltrans <- P2
+
+rolltrans[42,41]<-5/6
+rolltrans[11,42] <- 5/6
+for(i in 1:6){
+  rolltrans[11+2*i,41] <- 1/36
+}
+for(i in 1:6){
+  rolltrans[11+2*i,42]<-1/36
+}
+colSums(rolltrans)
+
+Jail <- matrix(0,nrow=42,ncol=42)
+for(i in 1:42){
+  Jail[i,i] <- 1
+}
+Jail[31,31] <- 0
+Jail[41,31] <- 1
+
+colSums(Jail)
+```
+
+Table 2
+```{r}
+Table2<-CommunityChest%*%Chance%*%Jail%*%rolltrans
+eigenStuff2 <- eigen(Table2)
+vecs2 <- eigenStuff2$vectors
+ssVec2 <- vecs2[,1]
+ssVec2 <- ssVec2/sum(ssVec2)
+ssVecDif2<-ssVec2
+ssVec2[11]<-ssVec2[41]+ssVec2[42]+ssVec2[11]
+ssVec2<-ssVec2[1:40]
+
+
+Second <- sort(ssVec2, decreasing=TRUE, index.return=TRUE)
+Second1 <- matrix(0,nrow=40,ncol=3)
+colnames(Second1) <- c("Space","State","Frequency (%)" )
+Second1[,1] <- Second$ix
+States2<-c(rep(0,40))
+for(i in 1:40){
+  States2[i]<-as.character(Monopoly$Name[Second$ix[i]])
+}
+Second1[,2]<-States
+Second1[1,2]<-"Jail"
+Second1[1,1] <- "11,41,42"
+Second1[,3]<-round(Re(Second$x)*100,3)
+Table2A<-kable(Second1, "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F) %>%
+  scroll_box(width = "100%", height = "400px")
+Table2A
+```
+
+Step 3: Next we will use the rule that after rolling three doubles consecutively, 
+the player is sent to jail. I will be using all the matrices already define above,
+ with a bit of change. We have a 1/216 chance that the player will be send directly to jail.
+```{r}
+##Roll Trans
+rolltrans <- matrix(0, nrow=40, ncol=40)
+probs <- c(0,1/36,2/36,3/36,4/36,5/36,6/36,5/36,4/36,3/36,2/36,1/36,rep(0,28))
+for(i in 1:40){
+  rolltrans[,i] <- cycleVec(probs, i)
+  }
+colSums(rolltrans)
+
+double<-matrix(0,42,42)
+double[1:40,1:40]<-rolltrans
+rolltrans<-double*215/216
+for(i in 1:40){
+  rolltrans[41,i]<-rolltrans[41,i]+1/216
+}
+rolltrans[42,41]<-5/6
+rolltrans[11,42] <- 5/6
+for(i in 1:6){
+  rolltrans[11+2*i,41] <- 1/36
+}
+for(i in 1:6){
+  rolltrans[11+2*i,42]<-1/36
+}
+
+stayinjail <- matrix(0,nrow=42,ncol=42)
+probssty <- c()
+for(i in 1:42){
+  stayinjail[i,i] <- 1
+}
+stayinjail[31,31] <- 0
+stayinjail[41,31] <- 1
+```
+Table 3:
+```{r}
+Table3 <- CommunityChest%*%Chance%*%stayinjail%*%rolltrans
+eigenStuff3 <- eigen(Table3)
+vecs3 <- eigenStuff3$vectors
+ssVec3 <- vecs3[,1]
+ssVec3 <- ssVec3/sum(ssVec3)
+ssVecDif3<-ssVec3
+ssVec3[11] <- ssVec3[42]+ssVec3[41]+ssVec3[11]
+ssVec3<-ssVec3[1:40]
+
+Third <- sort(ssVec3, decreasing=TRUE, index.return=TRUE)
+Third2 <- matrix(0,nrow=40,ncol=3)
+colnames(Third2) <- c("Space","State","Frequency (%)" )
+Third2[,1] <- Third$ix
+States3<-c(rep(0,40))
+for(i in 1:40){
+  States3[i]<-as.character(Monopoly$Name[Third$ix[i]])
+}
+Third2[,2]<-States3
+Third2[1,2]<-"Jail"
+Third2[1,1] <- "11,41,42"
+Third2[,3]<-round(Re(Third$x)*100,3)
+Table3A<-kable(Third2, "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F) %>%
+  scroll_box(width = "100%", height = "1000px")
+Table3A
+```
+
+
+## Step 4: Game analysis
+```{r}
+Table4<-matrix(0,nrow=8,ncol=4)
+colnames(Table4)<-c("Group color","Group frequency(%)","Group Value per roll ($)","Rolls to break even")
+Table4[,1]<-c("Purple (Baltimore,Mediterranean)","Light Blue (Oriental,Vermont,Connecticut)","Maroon (St. Charles,States,Virginia)","Orange (St. Jaames, Tennesse,  NY)","Red (Kentucky,Indiana, Illinois)","Yellow (Atlantic, Ventnor, Marvin Gardens)","Green (Pacific,N. Carolina, Pennsylvania)","Dark Blue (Park Place, Boardwalk)")
+```
+
+###Steady-state Probabilities
+* What are the steady state probabilities for each color group? 
+(just add up the probabilies for all the properties in the group).
+```{r}
+Table4[,2]<-c(rep(0,8))
+for(i in 1:40){
+  for(j in 1:8){
+    if(Monopoly$Group[i]==j){
+      Table4[j,2]<-as.numeric(Table4[j,2])+Re(round((ssVec3[i])*100,3))
+    }
+  }
+}
+```
+
+
+
+###Earn per roll
+* Assuming the group is fully developed, how much does it earn per roll? 
+(Multiply the total rent times the probability).
+```{r}
+Table4[,3]<-c(rep(0,8))
+for(i in 1:40){
+  for(j in 1:8){
+    if(Monopoly$Group[i]==j){
+      Table4[j,3]<-as.numeric(Table4[j,3])+Re(round((ssVec3[i]*Monopoly$Rent[i]),3))
+    }
+  }
+}
+```
+
+
+##Rolls to Break Even
+* If you know how much a property earns per roll, 
+how many rolls does it take to "break even" for the property? 
+(Divide total development cost by earnings per roll).
+```{r}
+Property<-c(rep(0,8))
+for(i in 1:40){
+  for(j in 1:8){
+    if(Monopoly$Group[i]==j){
+      Property[j]<-Property[j]+Monopoly$Cost[i]+Monopoly$Total[i]
+    }
+  }
+}
+Table4[,4]<-round(Property/as.numeric(Table4[,3]),1)
+```
+
+Table 4: Game Analysis of *Color Groups*
+```{r}
+Table4A<-kable(Table4, "html") %>%
+  kable_styling(bootstrap_options = "striped", full_width = F) %>%
+  scroll_box(width = "100%", height = "400px")
+Table4A
+```
+Again above, we confirm what we were shown from the paper.
+
+
+Conclusion: My implementation gave values that were close to the values found from the paper. 
+I think the first thing I would change on this code is my implentation of the Chance and the 
+Community Chest, which I think could be more efficient. Another thing we could change or add 
+on the exploration of this game is possibly including the fact that instead of just staying in jail, 
+a player may want to leave jail as soon as possible by rolling doubles, pay a fine, or getting the Jail free card.  

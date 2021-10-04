@@ -1,0 +1,554 @@
+---
+title: "CDC Birth Data"
+author: "Keen Zarate"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+# For this project, we are looking in the birth data set from the CDC 
+and extracting only 10% of the original data. We are interested in analyzing 
+the effect of various factors on the health of a newborn baby as given by APGAR5min and APGAR10min. 
+We chose to work with APGAR5min as we think it might be more relevant to assessing newborn health. 
+We will be using linear regression, ridge and lasso, KNN regression as well as LDA classification for this project. 
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(glmnet)
+library(tidyverse)
+library(dplyr)
+library(gridExtra)
+library(FNN)
+library(ISLR)
+```
+
+Load in the data
+
+```{r}
+birth.df <- read.csv("~/Desktop/CDC.csv") # data extracted from cdc
+#birth.df <- read.csv("CDC.csv")
+#summary(birth.df)
+names(birth.df)
+```
+
+Our data has 30 variables. Pick variables to look: 
+Cig, birthwght, APGAR5min, GestHypertension, GestDiabetes, DeliveryWeight, 
+MotherEducation, Paysource, DeliveryMethod, MotherRace, NumPrenatalVisits, MotherAge
+
+```{r}
+#dat.select <- select(birth.df,MotherAge, MotherRace,MotherEducation, LiveBirthOrder, CigB4Preg, NumPrenatalVisits, Cig1Tri, BirthWgt, PrePregDiabetes,GestDiabetes, PrePregHypertension, GestHypertension, DeliveryMethod, PaySource, APGAR5Min,DeliveryWgt)
+```
+
+Identify the nature of the variables.
+
+```{r}
+birth.df <- birth.df %>%
+  mutate(MotherRace= as.factor(MotherRace),
+         FatherEducation= as.factor(FatherEducation),
+         FatherAge=as.factor(FatherAge),
+         FatherRace=as.factor(FatherRace),
+         PaySource=as.factor(PaySource),
+         MotherEducation=as.factor(MotherEducation),
+         IntSinceLastLiveBirth= as.factor(IntSinceLastLiveBirth),
+         MotherEducation = as.factor(MotherEducation),
+         LiveBirthOrder= as.factor(LiveBirthOrder))
+        #PaySource=as.factor(PaySource))
+numerics <- sapply(birth.df, is.numeric)
+factors <- sapply(birth.df, is.factor)
+```
+
+Change Pre-pregnancy diabetes and Gestational Diabetes from Yes or No responses into numeric responses. Remove the NAs and other unknown variables. 
+
+```{r,echo=FALSE}
+birth.df <- mutate(birth.df,
+               PrePregDiabetes=ifelse(PrePregDiabetes=="Y",1, ifelse(PrePregDiabetes=="N",0,2)),
+                                    PrePregHypertension=ifelse(PrePregHypertension=="Y",1, ifelse(PrePregHypertension=="N",0,2)),
+               GestHypertension=ifelse(GestHypertension=="Y",1, ifelse(GestHypertension=="N",0,2)),
+               GestDiabetes=ifelse(GestDiabetes=="Y",1, ifelse(GestDiabetes=="N",0,2)))
+
+birth.df <- birth.df %>%
+  mutate(PaySource = as.numeric(PaySource), IntSinceLastLiveBirth = as.numeric(IntSinceLastLiveBirth), LiveBirthOrder = as.numeric(LiveBirthOrder), FatherEducation = as.numeric(FatherEducation), FatherRace = as.numeric(FatherRace), FatherAge = as.numeric(FatherAge), MotherEducation = as.numeric(MotherEducation), MotherRace = as.numeric(MotherRace))
+
+birth.df <- birth.df %>%
+  filter(is.na(APGAR10Min)==FALSE)
+
+birth.df <- birth.df %>%
+  filter(NumPrenatalVisits !=99)
+
+birth.df <- birth.df %>%
+  filter(PaySource< 9)
+
+birth.df <- birth.df %>%
+  filter(DeliveryWgt != 999)
+
+birth.df <- birth.df %>%
+  filter(BirthWgt != 9999)
+
+birth.df <- birth.df %>%
+  filter(IntSinceLastLiveBirth < 99)
+
+birth.df <- birth.df %>%
+  filter(LiveBirthOrder< 9)
+
+birth.df <- birth.df %>%
+  filter(FatherEducation< 9)
+
+birth.df <- birth.df %>%
+  filter(FatherRace < 99)
+
+birth.df <- birth.df %>%
+  filter(FatherAge < 11)
+
+birth.df <- birth.df %>%
+  filter(MotherEducation < 9)
+
+birth.df <- birth.df %>%
+  filter( MotherRace < 99)
+
+birth.df <- birth.df %>%
+  mutate(PaySource = as.factor(PaySource), IntSinceLastLiveBirth = as.factor(IntSinceLastLiveBirth), LiveBirthOrder = as.factor(LiveBirthOrder), FatherEducation = as.factor(FatherEducation), FatherRace = as.factor(FatherRace), FatherAge = as.factor(FatherAge), MotherEducation = as.factor(MotherEducation), MotherRace = as.factor(MotherRace))
+
+head(birth.df)
+               
+```
+
+
+#Exploratory Data Analysis
+
+Looking at the relationship between Pay Sources i.e (private insurance, medicaid, direct payment etc have an impact on number of prenatal visits). We can hypothesize that those who have private insurance are more likely on average to go for check ups during pregnancy than those who have to pay per visit.
+
+
+Looking at the boxplot of number of prenatal Visits by pay Source, we see that those who paid by private insurance represented by group 2 had the most mumber of prenatal visits per average as compare to those who paid by themselves as represented by group 3.
+```{r}
+p <- ggplot(birth.df, aes(x=PaySource, y=NumPrenatalVisits)) + 
+  geom_boxplot() + labs(title="Number of Prenatal Visits by Pay Source")
+p
+```
+
+
+
+Observation: Looking at the graph, the majority of the women who gave birth are within the age range of 27-32. We can see that at a young age group between 10 - 25, the number of women who gave birth starts to increase and hit the peak at around 28 -29. Then it starts to decrease the older the age group is. 
+```{r}
+ggplot(data=birth.df, aes(birth.df$MotherAge)) + 
+  geom_bar(breaks=seq(10, 50, by = 10),
+                 col="blue", 
+                 fill="orange", 
+                 alpha = .1) + 
+  labs(title="Histogram for Mother's Age") +
+  labs(x="Mother Age", y="Number")
+```
+
+
+Looking at the effects of cigaretes on the health of the newborn baby.
+EXTRA: 
+
+birth.df <- mutate(birth.df,
+               Smoker=ifelse(CigB4Preg ==0, "Non smoker",
+                                   ifelse(CigB4Preg %in% 1:2, "1-10 Cigarettes",
+                                          ifelse(CigB4Preg == 3,"11-20 Cigarettes",
+                                          ifelse(CigB4Preg == 4,"21-40 Cigarettes",
+                                          ifelse(CigB4Preg == 5,"41 or more Cigarettes","Unknown"))))))
+
+ggplot(birth.df)+
+    geom_point(aes(BirthWgt,DeliveryWgt,color=factor(Smoker)))+
+  ggtitle("Distribution of Delivery Weight and Birth Weight by number of cigarettes smoked")
+
+
+Because there are more observations of non-smokers in comparison to smokers (for all the numbers of cigarettes smoked), it is difficult to observe a clear relationship or trend.
+
+Since APGAR5Min will be our response variable, let's see if there is any observable relationship of the score with birth weight and delivery weight of the mother.
+
+
+Put APGAR5Min into three categories Excellen, Bad and Normal.
+
+```{r}
+birth.df <- birth.df[,c(-30,-28,-5,-1,-2,-22)]
+
+#c(-1,-2,-5,-22,-27,-28,
+birth.df <- mutate(birth.df,
+               NewAPGAR=ifelse(APGAR5Min ==3, "Normal",
+                                  ifelse(APGAR5Min <=2, "Bad",
+                                         ifelse(APGAR5Min >=4,"Excellent","Need More Test"))))
+
+birth.df <- mutate(birth.df,
+                   NewAPGAR=as.factor(NewAPGAR))
+
+```
+
+
+Plot the APGAR category:
+
+```{r}
+ggplot(birth.df)+
+    geom_point(aes(BirthWgt,DeliveryWgt,color=factor(NewAPGAR)))+
+  ggtitle("APGAR5Min distribution by Delivery Weight and Birth Weight")
+```
+
+Regression:
+Our first approach is to use linear regression model on our response variable accounting for all of the other variables. We first split the data and made some predictive model test and our training data. 
+
+
+# Linear Regression
+
+Split data into train and test sets.
+```{r}
+#Creation of train and test data
+N <- nrow(birth.df)
+set.seed(1234)
+train <- sample(1:N, N/2, replace = FALSE)
+
+character_vars <- lapply(birth.df, class) == "character"
+birth.df[, character_vars] <- lapply(birth.df[, character_vars], as.factor)
+factor_vars <- lapply(birth.df, class) == "factor"
+birth.df[, factor_vars] <- lapply(birth.df[, factor_vars], as.numeric)
+
+train.df <- birth.df[train,]
+test.df <- birth.df[-train,]
+```
+
+
+Perform linear regression
+```{r}
+lm.mod <- lm(APGAR5Min~.,data = train.df)
+summary(lm.mod)
+```
+Looking at the coefficients, we can see the for most of the variables, we can see variety of correlations for different variables. Cig2Tri with coefficient 0.000389 positive correlation for instance. 
+
+Make some predictions: 
+```{r}
+pred.lm <- predict(lm.mod, newdata = test.df, type = "response")
+pred.lm <- round(pred.lm, digits = 0)
+
+# MSE
+(mse.linear <- with(test.df, mean((APGAR5Min - pred.lm)^2)))
+```
+
+##Cross Validation of Linear Regression
+```{r}
+sampleSize<-nrow(birth.df)
+
+mseCV <- function(data.df,kfolds=20){
+  folds <- sample(1:kfolds,sampleSize,rep=T)
+  mse <- rep(0,kfolds)
+  data.df<-sapply(data.df,as.numeric)
+  data.df<-as.data.frame(data.df)
+  for(k in 1:kfolds){
+    train.df <- data.df[folds !=k,]
+    test.df <- data.df[folds==k,]
+    model.lm <- lm(APGAR5Min~.,data=train.df)
+    vals <- predict(model.lm,newdata=test.df)
+    mse[k] <- with(test.df,mean((APGAR5Min-vals)^2))
+  }
+  mean(mse)
+}
+
+mse_linearCV <- mseCV(birth.df,20) 
+mse_linearCV
+
+```
+
+Information of results of **Linear Regression**
+```{r}
+(linearinfo <- c(mse.linear,mse_linearCV))
+```
+Error rate for linear regression looks pretty good.
+
+
+# KNN Regression
+
+Perform knn regression model! See if we did any better. 
+```{r}
+kval=15
+classes<-with(train.df,APGAR5Min)
+model.knn<-knn.reg(train.df,test.df,classes,k=kval)
+test.df$preds<-sapply(model.knn[4],as.numeric)
+
+# MSE
+(mse.knn <- with(test.df, mean((APGAR5Min - preds)^2)))
+```
+
+##Put in function 
+```{r}
+knn_reg_model<-function(a){
+  model.knn<-knn.reg(train.df,test.df,classes,k=a)
+  test.df$preds<-sapply(model.knn[4],as.numeric)
+  mse=with(test.df, mean((APGAR5Min - preds)^2))
+  mse
+}
+```
+
+Find the optimal k value for this.
+```{r}
+##Finding the optimal k-value
+kval=seq(1,80,by=10)
+i=1
+mse_c=c()
+while(i<=length(kval)){
+  train.df <- birth.df[train,]
+  test.df <- birth.df[-train,]
+  classes<-with(train.df,APGAR5Min)
+  
+  mse_c=c(mse_c,knn_reg_model(kval[i]))
+  i=i+1
+}
+mse_c
+```
+
+```{r}
+test.df1=data.frame(flexibility=kval,mse=mse_c)
+
+
+ggplot(test.df1,aes(flexibility,mse))+
+    geom_point()+geom_smooth(aes(flexibility,mse))
+```
+
+The optimal k-values are between 20-25. possibly 23.
+
+
+##Cross Validation of KNN Regression
+
+```{r}
+##Cross-Validation for KNN Regression
+kval=23
+
+sampleSize<-nrow(birth.df)
+
+mseCV <- function(data.df,kval,kfolds=10){
+  folds <- sample(1:kfolds,sampleSize,rep=T)
+  mse <- rep(0,kfolds)
+  for(k in 1:kfolds){
+    train.df1 <- data.df[folds !=k,]
+    test.df1 <- data.df[folds==k,]
+    classes<-with(train.df1,APGAR5Min)
+    model.knn<-knn.reg(train.df1,test.df1,classes,k=kval)
+    test.df1$preds<-sapply(model.knn[4],as.numeric)
+    mse[k] <- with(test.df1,mean((APGAR5Min-preds)^2))
+  }
+  mean(mse)
+}
+
+#Results from Cross-Validation 
+mse_knn_reg_cv=mseCV(birth.df,kval)
+mse_knn_reg_cv
+```
+
+Looking at the values below, it seems like error rate for the linear model is looking better than the knn. But let's compare this with Ridge and Lasso if we see something different? 
+```{r}
+(linearinfo <- c(mse.linear,mse_linearCV))
+(knninfo <- c(mse.knn, mse_knn_reg_cv))
+```
+#Ridge and Lasso
+
+```{r}
+x=model.matrix(APGAR5Min ~., birth.df)[,-1]
+y=na.omit(birth.df$APGAR5Min)
+```
+
+##Perfrom Ridge.
+```{r}
+lambda.grid <- 10^seq(10,-2,length=100)
+mod.ridge <- glmnet(x,y,alpha=0,intercept=F,lambda=lambda.grid)
+summary(mod.ridge)
+predict(mod.ridge, s=50, type="coefficients")[1:18,]
+plot(mod.ridge)
+```
+
+```{r}
+set.seed(1)
+
+#Separate data into train and test
+
+train=sample(1: nrow(x), nrow(x)/2)
+test=(-train)
+y.test=y[test]
+```
+
+Use cross validation to find out which is the best lambda to use for the ridge regression
+
+```{r}
+set.seed(1)
+cv.ridge = cv.glmnet(x[train ,], y[train], alpha=0)
+
+## here's how the mse looks a function of the log(lambda)
+plot(cv.ridge)
+
+bestLam = cv.ridge$lambda.min
+bestLam
+
+#Use optimal lambda on the test data
+
+ridge.pred <- predict(mod.ridge, s=bestLam, newx = x[test ,])
+mean((ridge.pred - y.test)^2)
+
+## Now build the model  on the optimal lambda
+mod.ridge1 <-
+  glmnet(x,y,alpha=0,intercept=F,lambda=bestLam)
+
+out <- glmnet(x,y,alpha=0)
+predict(out, type="coefficients", s=bestLam)[1:18 ,]
+
+## take a look at the coefficients
+(coef.ridge <- coef(mod.ridge1)[-1,1])
+
+## Sum of squares...
+sum(coef.ridge^2)
+```
+
+From our results we see that the optimal lambda is 0.0185 and so we used that to get the prediction on the test data. The mse of 0.31. We aslo got the coefficients using the optimal lambda value.
+
+```{r}
+## Predictions...
+# pred.ridge.train <- predict(mod.ridge,newx=X.train)
+# (mse.ridge.train <- mean((Y.train-pred.ridge.train)^2))
+# 
+# pred.ridge.test <- predict(mod.ridge,newx=X.test)
+# (mse.ridge.test <- mean((Y.test-pred.ridge.test)^2))
+```
+
+Now we use the same procedure we did for ridge regression on the Lasso.
+
+```{r}
+#Build a grid of Lambda values
+mod.lasso <- glmnet(x[train ,],y[train],alpha=1,lambda=lambda.grid)
+set.seed(1)
+
+#The plot of the lasso coefficients really shows hw they start to drop out
+plot(mod.lasso)
+```
+
+## Cross-validation for Lasso
+
+```{r}
+cv.out = cv.glmnet(x[train ,], y[train], alpha=1, intercept =F)
+plot(cv.out)
+optLambda = cv.out$lambda.min
+optLambda
+
+#The optimal lambda is 0.0003313
+
+## Predict on training and test data
+pred.lasso.train <- predict(mod.lasso,newx=x)
+pred.lasso.test <- predict(mod.lasso, s= optLambda, newx=x[test ,])
+(lassomse <- mean((pred.lasso.test-y.test)^2))
+
+#Our mse is 0.172 which is much better than the one for ridge regression where there was 0.31.
+
+## Build optimal lasso model
+mod.lasso1 <- glmnet(x[train,], y[train],alpha=1, intercept=F, lambda=optLambda)
+(mod.lasso1)
+```
+
+```{r}
+(linearinfo <- c(mse.linear,mse_linearCV))
+(knninfo <- c(mse.knn, mse_knn_reg_cv))
+(lassomse)
+```
+
+LDA Classification 
+
+```{r}
+library(MASS)
+birth.df <- mutate(birth.df,
+               NewAPGAR=ifelse(APGAR5Min ==3, "Normal",
+                                  ifelse(APGAR5Min <=2, "Bad",
+                                         ifelse(APGAR5Min >=4,"Excellent","Need More Test"))))
+birth.df <- mutate(birth.df,
+                   NewAPGAR=as.factor(NewAPGAR))
+
+newbirth.df <- birth.df[,-22]
+
+table(birth.df$NewAPGAR)
+N <- nrow(birth.df)
+train <- sample(1:N, N/2, replace = FALSE)
+newtrain <- newbirth.df[train,]
+newtest <- newbirth.df[-train,]
+
+(mod.lda <-lda(NewAPGAR~ ., data=newtrain))
+```
+
+
+##Do some predictive analysis on data. 
+```{r}
+pred.lda <- predict(mod.lda,newdata= newtest)
+newtest <- newtest %>%
+  mutate(pred=pred.lda[['class']])
+
+with(newtest,table(NewAPGAR,pred))
+
+(errlda <- with(newtest,mean(!NewAPGAR == pred)))
+```
+
+
+##Scale data!
+```{r}
+scaling<-mod.lda$scaling
+val <- (dim(scaling))
+val <- as.numeric(val)
+X <- data.matrix(newtest[,1:val])
+
+sum(scaling[,1]^2)
+s1 <- sum(scaling[,1]^2)
+s2 <- sum(scaling[,2]^2)
+scaling[,1] <- scaling[,1]/s1
+scaling[,2] <- scaling[,2]/s2
+
+X.trans<-X %*% scaling
+
+testTrans.df<-data.frame(NewAPGAR=factor(newtest$NewAPGAR),
+                          LDA1=X.trans[,1],
+                         LDA2=X.trans[,2])
+
+```
+
+```{r}
+ggplot(testTrans.df,aes(LDA1,LDA2,color=NewAPGAR))+
+  geom_point()+
+  scale_color_manual(values=c("red","blue","orange"))
+```
+
+```{r}
+
+mod.lda1<-lda(NewAPGAR~LDA1+LDA2,data=testTrans.df)
+lda.pred1<-predict(mod.lda1,data=testTrans.df)
+
+probs<-lda.pred1$posterior
+
+##GRID
+gridval <- 100
+x.vals0<-with(testTrans.df,seq(min(LDA1),max(LDA1),length=gridval))
+y.vals0<-with(testTrans.df,seq(min(LDA2),max(LDA2),length=gridval))
+grid.df <- expand.grid(x.vals0,y.vals0)
+names(grid.df) <- c("LDA1","LDA2")
+
+### make predictions for grid xy vals
+grid.lda <- predict(mod.lda1,newdata=grid.df)
+grid.df <- grid.df%>%
+                  mutate(NewAPGAR =grid.lda[['class']])
+
+
+### plot the grid values versus the original values
+grid.gg <- ggplot()+
+    geom_point(data=testTrans.df,aes(LDA1,LDA2,color=NewAPGAR),size=2)+
+    geom_tile(data=grid.df,aes(LDA1,LDA2,fill=NewAPGAR),alpha=0.2)+
+    scale_color_manual(values=c("red","blue","orange"))+
+    scale_fill_manual(values=c("red","blue","orange"))+
+    ggtitle("LDA with all predictors")
+grid.gg
+
+
+```
+
+##Summary of all error rates for regression and classification LDA. 
+```{r}
+MSE <- c(mse_linearCV,mse_knn_reg_cv,lassomse,errlda)
+names(MSE) <- c("Linear","KNN","LASSO","LDA")
+MSE
+```
+
+
+Conclusion: For this analysis we performed KNN, Linear and Ridge and Lasso Regression f
+or our response variable APGAR5Min. We used one classification method the Linear Discriminant Analysis. 
+For regression, it seems like our results is showing that linear regression is doing better with an error 
+rate of only 0.07. KNN with 0.17. We got a pretty good value for our LDA prediction of about 0.138 error rate. 

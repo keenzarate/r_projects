@@ -1,0 +1,306 @@
+---
+title: "Traveling Salesperson Problem"
+author: "Keen Zarate"
+---
+###Goal:
+The goal for this project is to use *Simulated Annealing* to figure out the shortest possible 
+route that a traveling salesperson could take when visiting multiple cities and returning to 
+the initial city. In addition, we will see an how the simulated annealing can produced routes 
+that takes into account cost of travel. In this case, if it is more expensive to travel 
+north-south than it is east-west. We'll see how it works!!!
+
+###Implementation Setup
+Below is just creating N random points which represents the "cities" the salesman would travel. 
+```{r}
+N <- 55
+xyvals <- matrix(runif(2*N, -10, 10), nrow=N)
+library(ggplot2)
+ggplot(data=NULL, aes(x=xyvals[,1], y=xyvals[,2])) +
+ geom_point(size=2, color="blue")
+```
+
+###Tours, Permutations, and Distances
+Below is to simulate just random routes the this salesman would follow. Probably wouldn't be the best one. 
+```{r}
+tour <- 1:N
+ggplot(data=NULL, aes(x=xyvals[,1], y=xyvals[,2])) +
+geom_point(size=2, color="blue") +
+geom_polygon(color="purple", fill=NA)
+
+```
+
+###Length of Tour
+Below is the function that would calculate the length of each tour by picking some of those random points. 
+```{r}
+distPair <- function(i, j, tour){
+x1 <- xyvals[tour[i],1]
+x2 <- xyvals[tour[j],1]
+y1 <- xyvals[tour[i],2]
+y2 <- xyvals[tour[j],2]
+return(sqrt((x1-x2)^2+(y1-y2)^2))
+}
+```
+
+Let's check?
+```{r}
+distPair(1,2,tour)
+```
+
+###Distance of entire route
+Below is the function that will calculate the distance of the entire tour of the salesman.
+```{r}
+distTour <- function(tour){
+tot <- 0
+N <- length(tour)
+for(i in 1:N){
+  if (i==N){
+    tot <- tot + distPair(N,1,tour)
+  } else {
+    tot <- tot + distPair(i,(i+1),tour)
+  }
+}
+tot
+}
+```
+
+Let's check:
+```{r}
+trivialTour <- 1:N
+distTour(trivialTour)
+```
+
+###Random Tour
+We can also simulate random tours
+```{r}
+randTour <- sample(1:N, N, rep=FALSE)
+randTour
+```
+
+```{r}
+distTour(randTour)
+```
+
+###Plot of *random tour*
+```{r}
+plotTour <- function(tour, ptSize=2){
+ggplot(data=NULL, aes(x=xyvals[tour,1], y=xyvals[tour,2])) +
+geom_point(size=ptSize, color="blue") +
+geom_polygon(color="purple",fill=NA)+
+    geom_text(aes(label=1:N),hjust=-1)
+}
+plotTour(randTour)
+```
+
+###Simulated Annealing and the TSP
+So,below is a way to optimize those routes.. to get a better and more effiecient travel for the salesman. We will be using simulated annealing for this process and let's see what it will produce us.
+
+###N Random Points
+Below are just random poitns created, just like what we did from earlier.
+```{r}
+N <- 55
+xyvals <- matrix(runif(2*N,-10,10),nrow=N)
+library(ggplot2)
+ggplot(data=NULL,aes(x=xyvals[,1],y=xyvals[,2]))+
+  geom_point(size=2,color="blue")+
+  geom_text(aes(label=1:N),hjust=-1)
+```
+
+###Trivial Tour
+This is just a possibility of routes we could take, this is super messy though, 
+we want something less crazier than this. 
+```{r}
+trivialTour <- 1:N
+plotTour(trivialTour)
+```
+
+Compute the initial distance. This is the only time you need to use *disTour* function.
+```{r}
+dist0 <- distTour(trivialTour)
+dist0
+```
+
+###Simulating Annealing
+Finally! We will now use Simulated Annealing.
+We begin by defining important parameters. M is the number of iterations, 
+we need to define sigma and the the decreasing factor. 
+```{r}
+M <- 10000
+sig2 <- 0.1
+decFac <- 0.9999
+```
+
+Next: The important part of the puzzle. In this for loop below, 
+we are expressing what where we want the tour to go and basically using the values 
+from above to give an optimized values for those tour.
+```{r}
+for(m in 1:M){
+  place <- sample(1:N,2,rep=F)
+  pos0 <- min(place)
+  pos1 <- max(place)
+  if(pos0 == 1 & pos1 == N){
+  next
+}
+
+  pos0old <- pos0 - 1
+  pos1new <- pos1 + 1
+
+  if(pos0 == 1){
+  pos0old <- N
+  }
+
+  if(pos1 == N){
+  pos1new <- 1
+  }
+
+  distLost <- distPair(pos0,pos0old,trivialTour) + distPair(pos1,pos1new,trivialTour)
+  distGain <- distPair(pos0old,pos1,trivialTour) + distPair(pos0,pos1new,trivialTour)
+  deltaDist <- distGain - distLost
+  dist1 <- dist0 + deltaDist
+
+  
+
+  trivialTour[pos0:pos1]<- trivialTour[pos1:pos0]
+
+  rho <- exp(-deltaDist/sig2)
+  if(runif(1,0,1) < rho){
+  dist0 <- dist1
+  } else{
+   trivialTour[pos0:pos1]<- trivialTour[pos1:pos0]
+  }
+  sig2 <- sig2*decFac
+}
+
+plotTour(trivialTour)
+dist0
+
+print(c(deltaDist,sig2))
+```
+
+Conclusion: As we can see, it's a lot neater than the previous random tours we just did. 
+The routes are not 100% optimized. Certain points could possibly be flipped to get better 
+routing, but again, we can possibly change the values of our sigma and also our decreasing factor to improve outcome. 
+
+###Extension:
+Suppose north-south travel is more expensive than east-west travel. Let's modify our distance function so
+that the difference between y-values is multiplied by some constant c. This is now the function to minimize
+along the tour.
+
+Essentially for this extension, we just need to change one thing from the 
+process that we already had earlier -- adding a cost value. 
+Let's implement this using our codes from earlier.
+
+```{r}
+N <- 55
+trivialTour <- 1:N
+M <- 10000
+xyvals <- matrix(runif(2*N,-10,10),nrow=N)
+sig2 <- 0.1
+decFac <- 0.9999
+```
+
+```{r}
+plotTour <- function(tour, ptSize=2){
+ggplot(data=NULL, aes(x=xyvals[tour,1], y=xyvals[tour,2])) +
+geom_point(size=ptSize, color="blue") +
+geom_polygon(color="purple",fill=NA)+
+    geom_text(aes(label=1:N),hjust=-1)
+}
+```
+
+###Cost Function
+```{r}
+c <- 15
+costPair <- function(i, j, tour){
+x1 <- xyvals[tour[i],1]
+x2 <- xyvals[tour[j],1]
+y1 <- xyvals[tour[i],2]
+y2 <- xyvals[tour[j],2]
+return(sqrt((x1-x2)^2+c*(y1-y2)^2))
+}
+```
+
+###Cost of entire route
+```{r}
+costTour <- function(tour){
+tot <- 0
+N <- length(tour)
+for(i in 1:N){
+  if (i==N){
+    tot <- tot + costPair(N,1,tour)
+  } else {
+    tot <- tot + costPair(i,(i+1),tour)
+  }
+}
+tot
+}
+dist0 <- costTour(trivialTour)
+```
+
+
+###Simulated Annealing Part
+Let's do this!!! See what happens...
+```{r}
+for(m in 1:M){
+  place <- sample(1:N,2,rep=F)
+  pos0 <- min(place)
+  pos1 <- max(place)
+  if(pos0 == 1 & pos1 == N){
+  next
+}
+
+  pos0old <- pos0 - 1
+  pos1new <- pos1 + 1
+
+  if(pos0 == 1){
+  pos0old <- N
+  }
+
+  if(pos1 == N){
+  pos1new <- 1
+  }
+
+  costLost <- costPair(pos0,pos0old,trivialTour) + costPair(pos1,pos1new,trivialTour)
+  costGain <- costPair(pos0old,pos1,trivialTour) + costPair(pos0,pos1new,trivialTour)
+  deltaCost <- costGain - costLost
+  dist1 <- dist0 + deltaCost
+
+  
+
+  trivialTour[pos0:pos1]<- trivialTour[pos1:pos0]
+
+  rho <- exp(-deltaCost/sig2)
+  if(runif(1,0,1) < rho){
+  dist0 <- dist1
+  } else{
+   trivialTour[pos0:pos1]<- trivialTour[pos1:pos0]
+  }
+  sig2 <- sig2*decFac
+}
+
+plotTour(trivialTour)
+dist0
+
+print(c(deltaCost,sig2))
+```
+
+###Conclusion: 
+It looks like the travel is more towards east-west which makes sense because north-south 
+is more expensive. It looks like is doing better also on trying to optimize the best route 
+possible just looking at the points in comparison to earlier where only the distance was studied. 
+It looks so much neater and "cheaper" to travel this way. 
+It seems to be doing better on optimizing the route than from earlier. Cool stuff!
+
+
+###Limitation and Future Work
+I think one limitation of this simulated annealing project is that, 
+sigma and the decreasing factor needs to me manipulated a lot to get the best results. 
+I think that there could be a way to not get a result until the graph shows that best routes. 
+Like it would just keep iterating until it finds the best possible routes. 
+Also, may be for future modeling, may be simulated annealing could be done better and instead 
+of having sigma and some decreasing factor, like I suggested earlier could have some kind of 
+code that allows for better optimization of routes and iterates multiple times until we get t
+he better result. I think that overall, the simulated annealing does help on this. 
+I think one thing would be interesting to look at for this TSP could be like patterns of travels around 
+the world, comparing cold countries vs warm and trying to see where likely people would travel at a 
+given year if climate/weather were taken into account. I read a paper that does this which studied 
+temperature and travel using simulated annealing. 

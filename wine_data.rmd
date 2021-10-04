@@ -1,0 +1,303 @@
+---
+title: "Wine Data"
+author: "Keen Zarate"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+Which model wins?
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(ggplot2)
+library(tidyverse)
+library(FNN) ##for knn.reg
+library(MASS) ##for lda
+```
+
+I'm using this random wine dataset. 
+
+
+Analyze Wine data set with LDA
+```{r}
+wine <-read.csv("~/Desktop/ADM/Raw Data/wine.csv")
+head(wine)
+#with(wine,table(Wine))
+```
+
+```{r}
+wine.df<-wine
+```
+
+```{r}
+(num<-nrow(wine.df))
+train<-sample(1:num,num/2,rep=F)
+train.df<-wine.df[train,]
+test.df<-wine.df[-train,]
+```
+
+```{r}
+names(wine.df)
+
+ggplot(train.df)+
+    geom_point(aes(Alcohol,Malic.acid,color=factor(Wine)))
+ggplot(train.df)+
+    geom_point(aes(Color.int,Hue,color=factor(Wine)))
+```
+
+
+```{r}
+#######################################################
+## Build the LDA model using all the predictors
+mod.lda<-lda(Wine ~ . , data=train.df)
+
+##better than summary(mod.lda)
+mod.lda
+```
+
+```{r}
+## Predict on the test data.
+lda.pred<-predict(mod.lda,newdata=test.df)
+
+test.df<- test.df %>%
+  mutate(pred=lda.pred$class)
+
+##How good does this work....
+with(test.df,table(Wine,pred))
+err.lda<-with(test.df,mean(Wine!=pred))
+```
+
+```{r}
+### What are these scaling vectors in the 3-class case?
+Wvec<-mod.lda$scaling
+##Now there are two of them. If you have C classes, there will C-1
+```
+
+```{r}
+##The 2 scaling vectors determine a plane in  8-space.
+## We can project onto these
+X<-data.matrix(test.df[,2:14])
+##Check the dimensions
+
+dim(X)
+dim(Wvec)
+
+sum(Wvec[,2]^2)
+s1 <- sum(Wvec[,1]^2)
+s2 <- sum(Wvec[,2]^2)
+Wvec[,1] <- Wvec[,1]/s1
+Wvec[,2] <- Wvec[,2]/s2
+
+X.trans<-X %*% Wvec
+dim(X.trans)
+
+testTrans.df<-data.frame(Wine=factor(test.df$Wine),
+                          LDA1=X.trans[,1],
+                          LDA2=X.trans[,2])
+```
+
+
+```{r}
+#################################################
+ggplot(testTrans.df,aes(LDA1,LDA2,color=Wine))+
+  geom_point()+
+  scale_color_manual(values=c("red","blue","orange"))
+####################################################
+```
+
+
+```{r}
+####do lda again....
+mod.lda2<-lda(Wine~LDA1+LDA2,data=testTrans.df)
+lda.pred2<-predict(mod.lda2,data=testTrans.df)
+```
+
+
+```{r}
+##posterior probabilities
+probs<-lda.pred2$posterior
+head(probs)
+
+## make a plotting grid in x and y
+GS <- 100
+x.vals0<-with(testTrans.df,seq(min(LDA1),max(LDA1),length=GS))
+y.vals0<-with(testTrans.df,seq(min(LDA2),max(LDA2),length=GS))
+grid.df <- expand.grid(x.vals0,y.vals0)
+names(grid.df) <- c("LDA1","LDA2")
+```
+
+
+```{r}
+###make predictions for grid xy vals
+grid.lda <- predict(mod.lda2,newdata=grid.df)
+
+grid.df <- grid.df%>%
+                  mutate(Wine =grid.lda$class)
+```
+
+
+```{r}
+##plot the grid values versus the original values
+grid.gg <- ggplot()+
+    geom_point(data=testTrans.df,aes(LDA1,LDA2,color=Wine),size=2)+
+    geom_tile(data=grid.df,aes(LDA1,LDA2,fill=Wine),alpha=0.2)+
+    scale_color_manual(values=c("red","blue","brown"))+
+    scale_fill_manual(values=c("red","blue","brown"))+
+    ggtitle("LDA")
+grid.gg
+```
+
+
+```{r}
+err.lda
+```
+Error rate for LDA classifying by wine type is 0.0224. Pretty good. Let's compare it with KNN. 
+
+
+Analyize with KNN
+
+Let's just try to classify being wine 1 or not
+
+```{r}
+(num<-nrow(wine.df))
+train<-sample(1:num,num/2,rep=F)
+train.df<-wine.df[train,]
+test.df<-wine.df[-train,]
+```
+```{r}
+wine1.df <- train.df$Wine
+```
+## KNN Time
+Here we go.
+
+First we  need to be careful extracting data in the correct form
+
+```{r}
+(num<-nrow(wine.df))
+train<-sample(1:num,num/2,rep=F)
+train.df<-wine.df[train,]
+test.df<-wine.df[-train,]
+
+dim(train.df)
+dim(test.df)
+```
+```{r}
+wine1.df <- train.df$Wine
+class(wine1.df )
+```
+## KNN Time
+Here we go.
+
+First we  need to be careful extracting data in the correct form
+
+```{r}
+train.dat<-train.df[,2:14]
+classes<-with(train.df,wine1.df)
+test.dat<-test.df[,2:14]
+```
+
+Here we go...suppose we want to use 5 nearest neighbors.
+```{r}
+kval<-5
+knn.mod<-knn(train.dat,test.dat,cl=wine1.df,5)
+```
+How did it turn out?
+
+```{r}
+with(test.df,table(wine1.df,knn.mod))
+err.knn<-with(test.df,mean(wine1.df!=knn.mod))
+```
+
+```{r}
+numReps<-25
+errs.knn<-numeric(numReps)
+```
+
+
+```{r}
+for(m in numReps){
+  train<-sample(1:num,num/2,rep=F)
+  train.df<-wine.df[train,]
+  test.df<-wine.df[-train,]
+  knn.mod<-knn(train.dat,test.dat,classes,5)
+  errs.knn[m]<-with(test.df,mean(wine1.df!=knn.mod))
+}
+mean(errs.knn)
+```
+
+```{r}
+err.lda
+mean(errs.knn)
+```
+
+LDA is slightly better than KNN
+
+How about predicting/classifying all wine type using logisitc regression?
+
+```{r}
+wine.df <- mutate(wine.df,
+                resp.val=ifelse(Wine=="1",1,0))
+```
+
+```{r}
+mod.log5 <- glm(resp.val~Alcohol+Malic.acid+Color.int+Mg,
+                family=binomial,
+                data=wine.df)
+```
+
+
+```{r}
+probs <- predict(mod.log5, data=wine.df, type="response")
+wine.df<-mutate(wine.df, val.log = probs)
+```
+
+```{r}
+calcErr <- function(thresh.pred) {
+ wine.df<-wine.df %>% 
+  mutate(pred.log = ifelse(val.log < thresh.pred,
+                               0,1))
+  with(wine.df,mean(resp.val != pred.log))
+}
+calcErr(0.01)
+calcErr(0.9)
+```
+
+```{r}
+threshVals<-seq(0,0.5,length.out = 100)
+err.preds<-map_dbl(threshVals,calcErr)
+plot(threshVals,err.preds)
+
+min(err.preds)
+id.min<-which.min(err.preds)
+threshVals[id.min]
+```
+
+```{r}
+wine.df <- mutate(wine.df,prob.log = probs)
+```
+
+```{r}
+wine.df<-wine.df %>% 
+  mutate(pred.log=ifelse(prob.log<threshVals[id.min],0,1))
+with(wine.df,table(resp.val, pred.log))
+```
+
+```{r}
+(err.loggis <- with(wine.df, mean(!resp.val == pred.log)))
+```
+
+```{r}
+err.lda
+mean(errs.knn)
+err.loggis
+
+```
+
+Looks like LDA wins. 
